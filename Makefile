@@ -1,5 +1,5 @@
 main: main.o
-	ld -o main main.o -static --nmagic
+	ld -o main main.o -static --omagic
 	strip -s main
 
 main.o: main.rs
