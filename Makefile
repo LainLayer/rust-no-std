@@ -4,9 +4,9 @@ main: main.o
 
 main.o: main.rs
 	rustc main.rs --emit=obj \
-	              -C opt-level=z \
-	              -C panic="abort" \
-	              -C strip="debuginfo"
+                  -C opt-level=z \
+                  -C panic="abort" \
+                  -C strip="debuginfo"
 
 clean:
 	rm main.o main
