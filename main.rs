@@ -9,11 +9,20 @@ fn panic(_info: &PanicInfo) -> ! {
     loop {}
 }
 
-#[no_mangle]
-pub extern fn _start() {
-    let data: &str = "balls\n";
-    let ptr = data.as_ptr();
-    let size: u64 = 6;
+fn exit(exit_code: usize) {
+    unsafe {
+        asm! (
+            "mov x0, {exit_code}",
+            "mov w8, 93",
+            "svc 0",
+            exit_code = in(reg) exit_code
+        );
+    }
+}
+
+fn print(text: &str) {
+    let ptr = text.as_ptr();
+    let size: usize = text.len();
     unsafe {
         asm! (
             "mov x0, 1",
@@ -25,12 +34,10 @@ pub extern fn _start() {
             size = in(reg) size
         );
     }
+}
 
-    unsafe {
-        asm! (
-            "mov x0, 0",
-            "mov w8, 93",
-            "svc 0"
-        );
-    }
+#[no_mangle]
+pub extern fn _start() {
+    print("Hello World\n");
+    exit(0);
 }
