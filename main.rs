@@ -85,7 +85,7 @@ fn input(buffer: &mut [u8; 1024]) -> &str {
             "mov x1, {buf}",
             "mov x2, 1024",
             "mov w8, 63",
-            "syscall",
+            "svc 0",
             buf = in(reg) ptr
         );
 
