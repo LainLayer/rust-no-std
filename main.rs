@@ -63,7 +63,14 @@ fn print(text: &str) {
             "mov rax, 1",
             "syscall",
             ptr = in(reg) ptr,
-            size = in(reg) size
+            size = in(reg) size,
+            // Mark all registers which are not preserved by the "C" calling
+            // convention as clobbered.
+            // https://doc.rust-lang.org/rust-by-example/unsafe/asm.html#symbol-operands-and-abi-clobbers
+            //
+            // Without this the program just starts printing garbage
+            // TODO: we may want to do something similar for aarch64
+            clobber_abi("C")
         );
     }
 }
@@ -89,6 +96,7 @@ fn input(buffer: &mut [u8; 1024]) -> &str {
             buf = in(reg) ptr
         );
 
+        // TODO: strip off newlines in aarch64 (see x86_64 implementation)
         return core::str::from_utf8_unchecked(buffer);
     }
 }
@@ -96,6 +104,7 @@ fn input(buffer: &mut [u8; 1024]) -> &str {
 #[cfg(target_arch="x86_64")]
 fn input(buffer: &mut [u8; 1024]) -> &str {
     let ptr = (*buffer).as_mut_ptr();
+    let mut n: usize;
 
     unsafe {
         asm!(
@@ -104,17 +113,25 @@ fn input(buffer: &mut [u8; 1024]) -> &str {
             "mov rdx, 1024",
             "mov rax, 0",
             "syscall",
-            buf = in(reg) ptr
+            buf = in(reg) ptr,
+            out("rax") n,
+            clobber_abi("C"),
         );
-
-        return core::str::from_utf8_unchecked(buffer);
+        // Trim the trailing newlines
+        while n > 0 && *buffer.get_unchecked(n-1) == b'\n' {
+            n -= 1;
+        }
+        return core::str::from_utf8_unchecked(buffer.get_unchecked(0..n));
     }
 }
 
 #[no_mangle]
 pub extern fn _start() {
     let mut buffer = [0u8; 1024];
-    let text = input(&mut buffer);
-    print(text);
+    print("What is your name? ");
+    let name = input(&mut buffer);
+    print("Hello, ");
+    print(name);
+    print("!");
     exit(0);
 }
