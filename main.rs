@@ -6,29 +6,29 @@ use core::arch::asm;
 
 #[panic_handler]
 fn panic(_info: &PanicInfo) -> ! {
-    loop {}
+    exit(-2)
 }
 
 #[cfg(target_arch="aarch64")]
-fn exit(exit_code: usize) {
+fn exit(exit_code: i32) -> ! {
     unsafe {
         asm! (
-            "mov x0, {exit_code}",
-            "mov w8, 93",
             "svc 0",
-            exit_code = in(reg) exit_code
+            in("x0") exit_code,
+            in("w8") 93,
+            options(noreturn, nomem, nostack, preserves_flags)
         );
     }
 }
 
 #[cfg(target_arch="x86_64")]
-fn exit(exit_code: usize) {
+fn exit(exit_code: i32) -> ! {
     unsafe {
         asm! (
-            "mov rdi, {exit_code}",
-            "mov rax, 60",
             "syscall",
-            exit_code = in(reg) exit_code
+            in("rax") 60,
+            in("rdi") exit_code,
+            options(noreturn, nomem, nostack, preserves_flags)
         );
     }
 }
@@ -41,12 +41,10 @@ fn print(text: &str) {
     unsafe {
         asm! (
             "mov x0, 1",
-            "mov x1, {ptr}",
-            "mov x2, {size}",
             "mov w8, 64",
             "svc 0",
-            ptr = in(reg) ptr,
-            size = in(reg) size
+            in("x1") ptr,
+            in("x2") size
         );
     }
 }
@@ -57,20 +55,14 @@ fn print(text: &str) {
     let size: usize = text.len();
     unsafe {
         asm! (
-            "mov rdi, 1",
-            "mov rsi, {ptr}",
-            "mov rdx, {size}",
-            "mov rax, 1",
             "syscall",
-            ptr = in(reg) ptr,
-            size = in(reg) size,
-            // Mark all registers which are not preserved by the "C" calling
-            // convention as clobbered.
-            // https://doc.rust-lang.org/rust-by-example/unsafe/asm.html#symbol-operands-and-abi-clobbers
-            //
-            // Without this the program just starts printing garbage
-            // TODO: we may want to do something similar for aarch64
-            clobber_abi("C")
+            inlateout("rax") 1 => _,
+            in("rsi") ptr,
+            in("rdx") size,
+            in("rdi") 1,
+            out("rcx") _,
+            out("r11") _,
+            options(nostack, readonly, preserves_flags),
         );
     }
 }
@@ -102,36 +94,38 @@ fn input(buffer: &mut [u8; 1024]) -> &str {
 }
 
 #[cfg(target_arch="x86_64")]
-fn input(buffer: &mut [u8; 1024]) -> &str {
-    let ptr = (*buffer).as_mut_ptr();
-    let mut n: usize;
+fn input(buffer: &mut [u8]) -> &str {
+    let ptr = buffer.as_mut_ptr();
+    let len = buffer.len();
+    let mut n: isize;
 
     unsafe {
         asm!(
-            "mov rdi, 0",
-            "mov rsi, {buf}",
-            "mov rdx, 1024",
-            "mov rax, 0",
             "syscall",
-            buf = in(reg) ptr,
-            out("rax") n,
-            clobber_abi("C"),
+            inlateout("rax") 0usize => n,
+            in("rdi") 0,
+            in("rsi") ptr,
+            in("rdx") len,
+            out("rcx") _,
+            out("r11") _,
+            options(nostack, preserves_flags)
         );
-        // Trim the trailing newlines
-        while n > 0 && *buffer.get_unchecked(n-1) == b'\n' {
-            n -= 1;
+
+        if n < 0 {
+            exit(-1);
         }
-        return core::str::from_utf8_unchecked(buffer.get_unchecked(0..n));
+
+        return core::str::from_utf8_unchecked(buffer.get_unchecked(0..(n as usize))).trim_ascii_end();
     }
 }
 
 #[no_mangle]
-pub extern fn _start() {
+pub extern "C" fn _start() -> ! {
     let mut buffer = [0u8; 1024];
     print("What is your name? ");
     let name = input(&mut buffer);
     print("Hello, ");
     print(name);
     print("!");
-    exit(0);
+    exit(0)
 }
